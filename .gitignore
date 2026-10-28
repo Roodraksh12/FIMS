@@ -1,0 +1,12 @@
+node_modules/
+.npm-cache/
+dist/
+test-results/
+playwright-report/
+*.tsbuildinfo
+tests/artifacts/
+.impeccable/
+.env
+.env.*
+!.env.example
+*.log
