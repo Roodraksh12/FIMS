@@ -1,12 +1,11 @@
-import "fake-indexeddb/auto";
 import { beforeEach, describe, it, expect, vi } from "vitest";
-import { readFile } from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
-import { load, reset, commit } from "../src/repository";
-import { selectAccount } from "../src/gateway";
-import { Services, validateFile, reminderCandidates } from "../src/services";
-import { progress, seed, type State } from "../src/domain";
-import * as certificate from "../src/certificate";
+import { load, reset, commit } from "../backend/repository";
+import { selectAccount } from "../backend/gateway";
+import { Services, reminderCandidates } from "../backend/services";
+import { progress, seed, type State } from "../shared/domain";
+import { sha256, validateFile } from "../shared/files";
+import * as certificate from "../backend/certificate";
 
 const pdfFile = () =>
   new File(["%PDF-1.7\n academic sample"], "degree.pdf", {
@@ -39,19 +38,12 @@ beforeEach(async () => {
   vi.restoreAllMocks();
   await load();
   await reset();
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async () => {
-      const bytes = await readFile("public/lnmiit-logo.jpeg");
-      return new Response(bytes, { status: 200 });
-    }),
-  );
 });
 describe("document validation and lifecycle", () => {
   it("computes a real SHA-256 hash", async () => {
     const f = pdfFile();
     const x = await validateFile(f);
-    expect(x.hash).toBe(await certificate.sha256(await f.arrayBuffer()));
+    expect(x.hash).toBe(await sha256(await f.arrayBuffer()));
     expect(x.hash).toHaveLength(64);
   });
   it("rejects empty, oversized, mismatched and disguised files", async () => {
@@ -402,7 +394,7 @@ describe("progress and dossier lifecycle", () => {
     const pdf = await PDFDocument.load(bytes);
     expect(pdf.getPages()).toHaveLength(1);
     expect(pdf.getTitle()).toContain("Aarav");
-    expect(c.hash).toBe(await certificate.sha256(bytes));
+    expect(c.hash).toBe(await sha256(bytes));
     expect(
       s.notifications.some(
         (n) => n.userId === "aarav" && n.page === "certificate",

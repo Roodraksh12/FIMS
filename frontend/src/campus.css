@@ -299,6 +299,7 @@
     font-size: 20px;
   }
 }
+/* CAMPUS THEME: These variables and rules override the base styles for the current prototype. */
 :root {
   --ink: #233448;
   --muted: #657080;
@@ -339,6 +340,7 @@ small,
 .fine {
   color: var(--muted);
 }
+/* COMMON BUTTON STYLE: Change spacing or shape here. Find more specific primary, danger, and login rules for individual buttons. */
 .button {
   border-radius: 4px;
   font-size: 13px;
@@ -365,6 +367,7 @@ small,
   color: #36536c;
   font-weight: 600;
 }
+/* EDIT SIDEBAR LOOK: Navigation colors, spacing, and branding are grouped here. */
 .sidebar {
   width: 220px;
   background: #f3f5f7;
@@ -556,6 +559,7 @@ main#main {
 .faculty-record > .badge {
   margin-left: auto;
 }
+/* EDIT FACULTY DASHBOARD LOOK: Layout, panels, and next-step cards start here. */
 .faculty-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.8fr) minmax(255px, 1fr);
@@ -697,6 +701,7 @@ main#main {
   font-weight: 500;
   color: #526a80;
 }
+/* PROGRESS BAR STYLE: Change the track appearance here. The filled width comes from progress in React. */
 .progress-track {
   height: 4px;
   border-radius: 0;
@@ -784,6 +789,7 @@ td small {
   width: 29px;
   height: 33px;
 }
+/* STATUS BADGE STYLE: Change badge text size, padding, or shape here. */
 .badge {
   font-size: 11px;
   font-weight: 500;
@@ -902,6 +908,7 @@ td small {
   border-radius: 4px;
   color: #263e53;
 }
+/* COMMON FORM STYLE: Change spacing around labels and inputs. The sign-in form has its own overrides below. */
 .field {
   font-size: 13px;
   color: #394f62;
@@ -937,6 +944,7 @@ td small {
 .approval-warning {
   background: #f8f2e9;
 }
+/* CERTIFICATE CARD STYLE: Change the browser preview here. The exported PDF is drawn on the server. */
 .certificate-card {
   background: #f4f6f8;
   border-color: #dce3eb;
@@ -950,6 +958,7 @@ td small {
 .certificate-card > .fine {
   font-size: 12px;
 }
+/* UPLOAD AREA STYLE: Change the border and spacing around the file picker. */
 .drop-zone {
   background: #f6f8fb;
   border-color: #a6b9cb;
@@ -977,6 +986,7 @@ td small {
   border-radius: 5px;
   left: calc(50% + 110px);
 }
+/* EDIT SIGN-IN LOOK: Layout, branding, sample accounts, and form styles start here. */
 .login {
   grid-template-columns: minmax(380px, 1fr) minmax(440px, 1fr);
   background: #fff;
@@ -1012,6 +1022,7 @@ td small {
 .wordmark {
   display: none;
 }
+/* SIGN-IN HEADLINE STYLE: Change size, weight, and spacing here. The wording is in App.tsx. */
 .login-copy h1 {
   font-family: inherit;
   font-size: 38px;
@@ -1111,6 +1122,7 @@ td small {
   gap: 6px;
   margin: 15px 0;
 }
+/* SIGN-IN INPUT STYLE: Change padding or text size for the email and password fields here. */
 .login-form .field input {
   font-size: 14px;
   padding: 11px 12px;
@@ -1126,6 +1138,7 @@ td small {
 .divider span {
   background: white;
 }
+/* QUICK ACCOUNT LIST STYLE: Change the appearance of the demo account picker under the form. */
 .demo-accounts {
   gap: 0;
   border-top: 1px solid #e4e9ef;
@@ -1166,6 +1179,7 @@ td small {
   line-height: 1.8;
   margin-top: 18px;
 }
+/* Responsive overrides below adjust the portal for wide and narrow screens. */
 @media (min-width: 1600px) {
   .topbar {
     padding: 0 48px;

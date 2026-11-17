@@ -10,3 +10,4 @@ tests/artifacts/
 .env.*
 !.env.example
 *.log
+backend/data/

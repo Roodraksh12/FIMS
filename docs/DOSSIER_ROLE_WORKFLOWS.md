@@ -24,6 +24,6 @@ The page title is **Review & approve inductions**. It retains the consolidated e
 
 ## Implementation and verification
 
-`src/DossierPages.tsx` implements separate FacultySubmission and HRInductionRecords components; `src/App.tsx` routes by role and retains the HOD review. Navigation, headings and descriptions are role-specific. Shared history/status helpers display the same persisted events with the correct actor.
+`frontend/src/DossierPages.tsx` implements separate FacultySubmission and HRInductionRecords components; `frontend/src/App.tsx` routes by role and retains the HOD review. Navigation, headings and descriptions are role-specific. Shared history/status helpers display the same persisted events with the correct actor.
 
 Browser checks cover distinct role surfaces, unavailable unauthorized controls, queue filtering, selected-record attendance navigation, mobile overflow, faculty submission/resubmission, HR forwarding, and HOD approval. Existing service tests continue to cover ownership, role, assignment, department, exact progress, stale state and transaction rules.

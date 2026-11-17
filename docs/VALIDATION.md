@@ -1,5 +1,13 @@
 # Validation record
 
+## Client–server demo validation, 17 November 2026
+
+- The TypeScript check and frontend bundle passed. The 27 service tests passed against SQLite.
+- All six Chrome journeys passed. The main journey keeps faculty and HR signed in through independent browser contexts and verifies that HR receives the upload, followed by mentor sign-off, HOD approval, and faculty PDF download.
+- An isolated file-backed API smoke test signed in by email and password, uploaded the sample PDF, restarted the API, and verified that HR could retrieve the original bytes.
+
+## Earlier browser-only validation
+
 Validated on 28 October 2026 on Windows using Node.js 26.7.0 and installed Google Chrome. The supported Node baseline is listed in README.md. All checks below ran against the delivered source after the final functional changes.
 
 ## Automated results

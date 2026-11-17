@@ -1,0 +1,24 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "FIMS: Debug frontend and API",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/backend/run.mjs",
+      "args": ["dev", "--port", "5173", "--strictPort"],
+      "cwd": "${workspaceFolder}",
+      "autoAttachChildProcesses": true,
+      "console": "internalConsole",
+      "outputCapture": "std",
+      "env": { "NO_COLOR": "1" },
+      "skipFiles": ["<node_internals>/**"],
+      "serverReadyAction": {
+        "pattern": "Local:\\s+(http://127\\.0\\.0\\.1:5173/)",
+        "uriFormat": "%s",
+        "action": "debugWithChrome",
+        "webRoot": "${workspaceFolder}/frontend"
+      }
+    }
+  ]
+}

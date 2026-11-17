@@ -1,14 +1,15 @@
+import type { Workspace as State } from "./repository";
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, ArrowRight, Check, FileText, Send } from "lucide-react";
 import {
-  type State,
+
   type InductionPlan,
   type Pillar,
   progress,
   date,
   time,
   label,
-} from "./domain";
+} from "../../shared/domain";
 
 interface CommonProps {
   state: State;
@@ -26,6 +27,7 @@ const taskPage = (pillar: Pillar) =>
     : pillar === "Mentorship"
       ? "mentorship"
       : "training";
+// Shared dossier history. Each entry shows who submitted, returned, or approved the dossier.
 function History({
   state,
   plan,
@@ -68,6 +70,7 @@ function History({
   );
 }
 
+// MY SUBMISSION: Edit the faculty readiness checklist, feedback, and submit or resubmit screen here.
 export function FacultySubmission({
   state: s,
   plan,
@@ -76,6 +79,7 @@ export function FacultySubmission({
   navigate,
   submit,
 }: CommonProps & { plan: InductionPlan }) {
+  // FACULTY READINESS: Pull progress and plan status together to decide whether the dossier can be submitted.
   const stats = progress(s, plan.id),
     dossier = s.dossiers.find((d) => d.planId === plan.id);
   const pending = plan.status === "PENDING_HOD_APPROVAL",
@@ -275,6 +279,7 @@ export function FacultySubmission({
   );
 }
 
+// INDUCTION RECORDS: This is the HR worklist and the clearance detail screen.
 export function HRInductionRecords({
   state: s,
   plans,
@@ -293,6 +298,7 @@ export function HRInductionRecords({
   inspect: (id: string) => void;
   viewEvidence: (taskId: string) => void;
 }) {
+  // HR QUEUE STATE: The selected filter and search text control which records are shown.
   const [filter, setFilter] = useState("all"),
     [search, setSearch] = useState("");
   const selected = plans.find((p) => p.id === selectedId);
@@ -300,9 +306,11 @@ export function HRInductionRecords({
     s.faculty.find((f) => f.id === p.facultyId)!;
   const userFor = (p: InductionPlan) =>
     s.users.find((u) => u.id === facultyFor(p).userId)!;
+  // HR READY FILTER: Use the same shared progress calculation as the faculty view.
   const isReady = (p: InductionPlan) =>
     progress(s, p.id).eligible &&
     ["IN_PROGRESS", "DRAFT", "REVISION_REQUIRED"].includes(p.status);
+  // Edit which records match the HR status filter and search text here.
   const queue = plans.filter((p) => {
     const name = userFor(p).name + " " + facultyFor(p).employeeCode;
     return (
@@ -431,6 +439,7 @@ export function HRInductionRecords({
         </section>
       </div>
     );
+  // The selected faculty record is open. The JSX below renders its clearance details and forwarding controls.
   const f = facultyFor(selected),
     stats = progress(s, selected.id),
     tasks = s.tasks.filter((t) => t.planId === selected.id),

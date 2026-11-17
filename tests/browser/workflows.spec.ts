@@ -26,7 +26,16 @@ async function nav(page: Page, name: string) {
     .getByRole("button", { name: new RegExp("^" + name + "(?:\\s*\\d+)?$") })
     .click();
 }
-test.beforeEach(async ({ page }) => {
+test.beforeEach(async ({ page, request }) => {
+  const session = await request.post("/api/session", {
+    data: { demoId: "admin" },
+  });
+  expect(session.ok()).toBe(true);
+  const { token } = await session.json();
+  const reset = await request.post("/api/reset", {
+    headers: { Authorization: "Bearer " + token },
+  });
+  expect(reset.ok()).toBe(true);
   await page.goto("/");
   await page.getByRole("button", { name: /New faculty Dr. Aarav/ }).click();
   await expect(
@@ -35,12 +44,22 @@ test.beforeEach(async ({ page }) => {
 });
 test("complete upload, verify, signoff, submit, cancel, approve and download with persistence", async ({
   page,
+  browser,
+  baseURL,
 }) => {
   await mkdir(artifacts, { recursive: true });
   const errors: string[] = [];
   page.on("pageerror", (e) => errors.push(e.message));
   await page.setViewportSize({ width: 1440, height: 1100 });
   await page.screenshot({ path: artifacts + "/desktop.png", fullPage: true });
+  const hrContext = await browser.newContext({ baseURL });
+  const hr = await hrContext.newPage();
+  await hr.goto("/");
+  await hr.getByRole("button", { name: /HR coordinator/ }).click();
+  await nav(hr, "Document verification");
+  await expect(
+    hr.getByRole("heading", { name: "The queue is clear" }),
+  ).toBeVisible();
   await nav(page, "My documents");
   await page
     .getByRole("button", { name: "Upload", exact: true })
@@ -48,7 +67,7 @@ test("complete upload, verify, signoff, submit, cancel, approve and download wit
     .click();
   await page
     .getByLabel("Choose document")
-    .setInputFiles("public/samples/qualification.pdf");
+    .setInputFiles("frontend/public/samples/qualification.pdf");
   await expect(
     page.getByText("SHA-256:", { exact: false }).first(),
   ).toBeVisible();
@@ -63,13 +82,12 @@ test("complete upload, verify, signoff, submit, cancel, approve and download wit
   await expect(
     page.getByRole("button", { name: "Preview", exact: true }),
   ).toBeVisible();
-  await account(page, "neha");
-  await nav(page, "Document verification");
-  await page.getByRole("button", { name: "Review", exact: true }).click();
-  await page.getByRole("button", { name: "Save review", exact: true }).click();
+  await hr.getByRole("button", { name: "Review", exact: true }).click();
+  await hr.getByRole("button", { name: "Save review", exact: true }).click();
   await expect(
-    page.getByRole("heading", { name: "The queue is clear" }),
+    hr.getByRole("heading", { name: "The queue is clear" }),
   ).toBeVisible();
+  await hrContext.close();
   await account(page, "rajesh");
   await nav(page, "Mentorship");
   await page.getByRole("button", { name: "Review", exact: true }).click();
@@ -141,7 +159,7 @@ test("rejection, reupload, mentorship revision, dossier return and resubmission"
     .click();
   await page
     .getByLabel("Choose document")
-    .setInputFiles("public/samples/qualification.pdf");
+    .setInputFiles("frontend/public/samples/qualification.pdf");
   await page
     .getByRole("button", { name: "Submit document", exact: true })
     .click();
@@ -162,7 +180,7 @@ test("rejection, reupload, mentorship revision, dossier return and resubmission"
   await page.getByRole("button", { name: "Re-upload", exact: true }).click();
   await page
     .getByLabel("Choose document")
-    .setInputFiles("public/samples/qualification.pdf");
+    .setInputFiles("frontend/public/samples/qualification.pdf");
   await page
     .getByRole("button", { name: "Submit document", exact: true })
     .click();
@@ -485,7 +503,7 @@ test("HR forwards a cleared record while faculty tracks the submission", async (
     .click();
   await page
     .getByLabel("Choose document")
-    .setInputFiles("public/samples/qualification.pdf");
+    .setInputFiles("frontend/public/samples/qualification.pdf");
   await page
     .getByRole("button", { name: "Submit document", exact: true })
     .click();

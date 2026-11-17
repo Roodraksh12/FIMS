@@ -1,9 +1,8 @@
-import type { State, InductionPlan } from "./domain";
-import { date } from "./domain";
-export const sha256 = async (bytes: ArrayBuffer) =>
-  Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)))
-    .map((x) => x.toString(16).padStart(2, "0"))
-    .join("");
+import { readFile } from "node:fs/promises";
+import type { State, InductionPlan } from "../shared/domain.ts";
+import { date } from "../shared/domain.ts";
+import { sha256 } from "../shared/files.ts";
+// EDIT THE CERTIFICATE PDF: The page size, colors, text, and positions are defined below.
 export async function createCertificate(
   s: State,
   p: InductionPlan,
@@ -46,10 +45,11 @@ export async function createCertificate(
       font,
       color: rgb(0.12, 0.22, 0.2),
     });
-  const response = await fetch("/lnmiit-logo.jpeg");
-  if (!response.ok)
-    throw new Error("Institution logo could not be loaded. Please retry.");
-  const logo = await pdf.embedJpg(await response.arrayBuffer());
+  const logo = await pdf.embedJpg(
+    await readFile(
+      new URL("../frontend/public/lnmiit-logo.jpeg", import.meta.url),
+    ),
+  );
   const scaled = logo.scaleToFit(66, 66);
   page.drawImage(logo, {
     x: (842 - scaled.width) / 2,
@@ -94,6 +94,7 @@ export async function createCertificate(
     9,
     sans,
   );
+  // The stored file and its SHA-256 hash are returned together for final approval.
   const bytes = await pdf.save();
   const buffer = new Uint8Array(bytes).buffer;
   return {

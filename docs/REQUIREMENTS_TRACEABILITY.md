@@ -1,6 +1,6 @@
 # Requirements traceability
 
-Baseline: Lab 2 SRS and the Lab 6–7 detailed design. “Implemented” below means interactive browser-prototype behavior, not deployed institutional infrastructure. Gateway, Services and Repository references mean `src/gateway.ts`, `src/services.ts` and `src/repository.ts`. UI is `src/App.tsx`; canonical types and progress are `src/domain.ts`.
+Baseline: Lab 2 SRS and the Lab 6–7 detailed design. “Implemented” below means interactive browser-prototype behavior, not deployed institutional infrastructure. Gateway, Services and Repository references mean `backend/gateway.ts`, `backend/services.ts` and `backend/repository.ts`. UI is `frontend/src/App.tsx`; canonical types and progress are `shared/domain.ts`.
 
 ## Functional requirements
 

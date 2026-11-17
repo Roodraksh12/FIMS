@@ -1,14 +1,14 @@
 # Demonstration walkthrough
 
-Start the local server and open the printed address. Use the same browser profile and origin between visits. Main demonstration: approximately 1–2 minutes once familiar with the account switcher.
+Run `npm.cmd run dev` from the project folder and open the printed URL. Sign in as Central Administration and use **Reset demo data** for a fresh run. For a two-window demo, keep Aarav in one window and Neha in an incognito window. After Aarav submits, the upload appears in Neha’s verification queue within a few seconds. Main demonstration: approximately 1–2 minutes once familiar with the account switcher.
 
 ## Core path
 
 1. New Faculty / Aarav: the dashboard shows five of seven required tasks satisfied. Go to My documents. Download the supplied sample if needed. Upload it for Academic qualification certificate; wait for the hash and submit. Progress is unchanged until HR verification.
 2. HR / Neha: Document verification → Review → inspect the PDF → Verify → Save review. The faculty document task now counts as satisfied.
 3. Mentor / Rajesh: Mentorship → Department & laboratory orientation → Review. Attempt without remarks to see validation; enter feedback and sign off. The task becomes Completed and the faculty member receives a notification.
-4. Faculty / Aarav: Induction dossiers → Submit for final review. Progress is 100% but approval still requires the HOD.
-5. HOD / Sunita: Induction dossiers → inspect the pillar counts and consolidated evidence. Approve → Cancel to demonstrate no change. Approve again → Confirm final approval. Wait for PDF generation and commit.
+4. Faculty / Aarav: My submission → Submit my dossier. Progress is 100% but approval still requires the HOD.
+5. HOD / Sunita: Review & approve → inspect the pillar counts and consolidated evidence. Approve → Cancel to demonstrate no change. Approve again → Confirm final approval. Wait for PDF generation and commit.
 6. Faculty / Aarav: Certificates → Download certificate PDF. Open the downloaded file. Refresh and download again to verify persistent original bytes. HR can also retrieve the completed certificate.
 
 ## Alternative paths
@@ -22,8 +22,8 @@ Start the local server and open the printed address. Use the same browser profil
 - Administration: Admin can add future-induction templates and edit account roles/access. Edited sessions are invalidated. Active mentors must be reassigned first.
 - Permission boundaries: select the ECE HOD to see only Kabir. Select Vikram before reassignment to see Ishita rather than Aarav. HR verification and admin settings are absent from faculty navigation. Services also reject direct unauthorized calls (automated tests).
 - Reports: HOD/mentor reports are scoped; HR/admin can view institutional summaries. Export CSV and inspect the audit history.
-- Persistence: refresh after an upload and after an approval. Open a second tab to observe synchronized changes; stale submissions are rejected rather than overwriting newer records.
-- Reset: sidebar → Reset demo data → confirm. Only the local prototype database is reset; original project files remain intact.
+- Persistence: refresh after an upload and after an approval. Open a second browser session to observe shared server data; stale submissions are rejected rather than overwriting newer records.
+- Reset: Central Administration → sidebar → Reset demo data → confirm. Only the local prototype database is reset; original project files remain intact.
 
 ## Screens
 

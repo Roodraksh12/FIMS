@@ -37,7 +37,6 @@ import {
   Building2,
 } from "lucide-react";
 import {
-  type State,
   type UserAccount,
   type Role,
   type TaskProgress,
@@ -47,12 +46,14 @@ import {
   label,
   date,
   time,
-} from "./domain";
-import { load, subscribe, reset } from "./repository";
-import { getSession, selectAccount, principal, visiblePlans } from "./gateway";
-import { Services, validateFile, reminderCandidates } from "./services";
+} from "../../shared/domain";
+import { load, subscribe, reset, type Workspace as State } from "./repository";
+import { getToken, signIn, signOut } from "./api";
+import { serviceClient } from "./services";
+import { validateFile } from "../../shared/files";
 import { FacultySubmission, HRInductionRecords } from "./DossierPages";
 
+// EDIT NAVIGATION LABELS: Change the text you see in the sidebar here. Keep the page keys such as overview and reports.
 const names: Record<string, string> = {
   overview: "Overview",
   documents: "My documents",
@@ -79,6 +80,7 @@ const icons: Record<string, typeof Files> = {
   notifications: Bell,
   settings: Settings,
 };
+// EDIT ROLE MENUS: Each list controls which screens a role sees. Server permissions are checked separately in backend/gateway.ts.
 const menus: Record<Role, string[]> = {
   NEW_FACULTY: [
     "overview",
@@ -124,6 +126,7 @@ const initials = (name: string) =>
     .slice(0, 2)
     .map((s) => s[0])
     .join("");
+// STATUS BADGES: This helper chooses a color for a status. The shared label helper formats its text.
 function Badge({ value }: { value: string }) {
   const positive = ["VERIFIED", "COMPLETED", "APPROVED", "PRESENT"].includes(
     value,
@@ -156,6 +159,7 @@ function Empty({ title, children }: { title: string; children?: ReactNode }) {
     </div>
   );
 }
+// SHARED DIALOG: Change popup layout or close behavior here. Find each popup's content near modal.kind below.
 function Modal({
   title,
   children,
@@ -200,6 +204,7 @@ function Modal({
     </dialog>
   );
 }
+// SHARED DIALOG FORM: Handles submission for popup forms. The sign-in form below has its own submit handler.
 function Form({
   children,
   onSubmit,
@@ -231,6 +236,7 @@ function Form({
     </form>
   );
 }
+// SHARED FORM FIELD: This component wraps its input in a label. Place extra buttons outside the Field.
 function Field({
   name,
   title,
@@ -269,7 +275,9 @@ function download(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+// MAIN SCREEN: This component holds sign-in, role dashboards, navigation, and most workflow dialogs.
 export default function App() {
+  // PAGE STATE: The workspace comes from the server. The URL hash selects the page, and planId selects the faculty record.
   const [state, setState] = useState<State | null>(null),
     [user, setUser] = useState<UserAccount | null>(null),
     [page, setPage] = useState(location.hash.slice(1) || "overview"),
@@ -284,32 +292,32 @@ export default function App() {
     [hash, setHash] = useState(""),
     [preview, setPreview] = useState<string | null>(null);
   const [hrDossierId, setHrDossierId] = useState<string | null>(null);
+  // SIGN-IN INPUT STATE: These hold the typed email and password. Add local form options here, such as password visibility.
   const [loginEmail, setLoginEmail] = useState(""),
     [loginPassword, setLoginPassword] = useState("");
-  const refresh = async () => {
+  // LOAD THE WORKSPACE: Refresh the signed-in user's records. Background refresh lets different browser sessions see saved changes.
+  const refresh = async (background = false) => {
+    const token = getToken();
     try {
-      const s = await load();
-      setState(s);
-      if (getSession()) {
-        try {
-          setUser(principal(s));
-        } catch {
-          selectAccount(null);
-          setUser(null);
-          setError("Your session has expired. Please log in again.");
-        }
-      } else setUser(null);
-    } catch {
-      setError(
-        "Browser storage could not be opened. Allow site storage and reload to continue.",
+      const result = await load();
+      if (getToken() && getToken() !== token) return;
+      if (token && !getToken() && result.currentUser) return;
+      setState((current) =>
+        current &&
+        current.currentUser?.id === result.currentUser?.id &&
+        (current.version > result.version ||
+          (current.version === result.version && current.remindersDue === result.remindersDue))
+          ? current
+          : result,
       );
+      setUser(result.currentUser);
+    } catch {
+      if (!background) setError("Could not reach the FIMS server. Check that npm run dev is running.");
     }
   };
   useEffect(() => {
     void refresh();
-    return subscribe(() => {
-      void refresh();
-    });
+    return subscribe(() => void refresh(true));
   }, []);
   useEffect(() => {
     const fn = () => {
@@ -320,8 +328,8 @@ export default function App() {
     return () => removeEventListener("hashchange", fn);
   }, []);
   useEffect(() => {
-    if (state && user && reminderCandidates(state, user).length)
-      void new Services(state.version).reminders().catch(() => {});
+    if (state?.remindersDue && user)
+      void serviceClient(state.version).reminders().catch(() => {});
   }, [state?.version, user?.id]);
   useEffect(() => {
     if (!toast) return;
@@ -350,6 +358,7 @@ export default function App() {
     setError("");
     setPreview(null);
   };
+  // RUN A SAVE ACTION: Prevent duplicate clicks, call the API, then refresh the screen and show a success or error message.
   async function run(
     work: () => Promise<unknown>,
     message = "Changes saved.",
@@ -374,19 +383,29 @@ export default function App() {
       setBusy(false);
     }
   }
-  const login = (u: UserAccount) => {
-    selectAccount(u);
-    setUser(u);
-    setPlanId("p-aarav");
-    setHrDossierId(null);
-    navigate("overview");
+  // SIGN-IN ACTION: The form sends credentials to the API. The quick-account buttons send a demo account ID.
+  const login = async (input: UserAccount | { email: string; password: string }) => {
+    if (busy) return;
+    setBusy(true);
     setError("");
+    try {
+      await signIn("id" in input ? { demoId: input.id } : input);
+      await refresh();
+      setPlanId("p-aarav");
+      setHrDossierId(null);
+      navigate("overview");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not sign in.");
+    } finally {
+      setBusy(false);
+    }
   };
   const logout = () => {
-    selectAccount(null);
+    void signOut().catch(() => {});
     setUser(null);
     setModal(null);
     setError("");
+    void refresh();
   };
   if (!state)
     return (
@@ -396,6 +415,7 @@ export default function App() {
         {error && <p role="alert">{error}</p>}
       </div>
     );
+  // EDIT THE SIGN-IN SCREEN: The block below contains the welcome text, email and password inputs, submit button, and demo accounts.
   const accounts = state.users.filter((u) => u.active);
   if (!user)
     return (
@@ -448,19 +468,13 @@ export default function App() {
             <h2>Sign in to FIMS</h2>
             <p className="muted">Use your institutional email to continue.</p>
             <form
+              // SIGN-IN SUBMIT: Pass the typed email and password to login without reloading the page.
               onSubmit={(e: FormEvent) => {
                 e.preventDefault();
-                const u = accounts.find(
-                  (u) =>
-                    u.email.toLowerCase() === loginEmail.trim().toLowerCase(),
-                );
-                if (!u || loginPassword !== "Fims@2026") {
-                  setError("Use a listed demo email and password Fims@2026.");
-                  return;
-                }
-                login(u);
+                void login({ email: loginEmail, password: loginPassword });
               }}
             >
+              {/* EMAIL FIELD: Change its label or placeholder here. The onChange below saves what the user types. */}
               <Field name="email" title="Institutional email">
                 <input
                   type="email"
@@ -471,6 +485,7 @@ export default function App() {
                   required
                 />
               </Field>
+              {/* PASSWORD FIELD: Its type hides the password. For a Show/Hide feature, use state for the type and put a type=button toggle after this Field. */}
               <Field name="password" title="Password">
                 <input
                   type="password"
@@ -486,6 +501,7 @@ export default function App() {
                   {error}
                 </div>
               )}
+              {/* SIGN-IN BUTTON: Change the visible wording here. This button submits the form above. */}
               <button className="button primary wide">
                 Sign in <ArrowRight size={18} />
               </button>
@@ -493,6 +509,7 @@ export default function App() {
             <div className="divider">
               <span>Try a demo account</span>
             </div>
+            {/* DEMO ACCOUNT BUTTONS: The list below shows the first five active accounts. */}
             <div className="demo-accounts">
               {accounts.slice(0, 5).map((u) => (
                 <button key={u.id} onClick={() => login(u)}>
@@ -507,16 +524,17 @@ export default function App() {
             </div>
             <p className="fine">
               Demo password: <strong>Fims@2026</strong>. All records are
-              fictional and stored in this browser.
+              fictional and stored by the local FIMS server.
             </p>
           </div>
         </section>
       </main>
     );
+  // SIGNED-IN DATA: The following helpers choose the active plan, resolve display names, and calculate screen data from the workspace.
   const s = state,
     u = user,
-    service = () => new Services(s.version);
-  const plans = visiblePlans(s, u),
+    service = () => serviceClient(s.version);
+  const plans = s.plans,
     plan = plans.find((p) => p.id === planId) || plans[0];
   const faculty = plan ? s.faculty.find((f) => f.id === plan.facultyId)! : null;
   const facultyUser = faculty
@@ -534,6 +552,7 @@ export default function App() {
     (n) => n.userId === u.id && !n.read,
   ).length;
   const actualPage = menus[u.role].includes(page) ? page : "overview";
+  // ROLE-SPECIFIC PAGE NAMES: The dossier page has a different name for faculty, HR, and HOD.
   const pageLabel = (key: string) =>
     key === "approvals"
       ? u.role === "NEW_FACULTY"
@@ -557,9 +576,11 @@ export default function App() {
   const assignment = plan
     ? s.assignments.find((a) => a.facultyId === plan.facultyId && a.active)
     : null;
+  // HR QUEUE FILTER: Only documents waiting for verification appear in the review queue.
   const pendingDocs = s.documents.filter(
     (d) => d.status === "UPLOADED_PENDING_VERIFICATION",
   );
+  // TASK SEARCH: Compare the search box text with each task's title without matching letter case.
   const filteredTasks = taskRows.filter((t) =>
     template(t).title.toLowerCase().includes(query.toLowerCase()),
   );
@@ -580,6 +601,7 @@ export default function App() {
       {children}
     </section>
   );
+  // FACULTY RECORD PICKER: The chosen plan controls which faculty member's tasks and records appear.
   const planPicker =
     plans.length > 1 ? (
       <label className="plan-picker">
@@ -600,6 +622,7 @@ export default function App() {
         </select>
       </label>
     ) : null;
+  // PILLAR CARDS: Change how Documents, Mentorship, and Training progress are displayed here.
   const pillarDisplay = stats && (
     <div className="pillars">
       {(["Documents", "Mentorship", "Training"] as Pillar[]).map((p, i) => {
@@ -623,6 +646,7 @@ export default function App() {
       })}
     </div>
   );
+  // NEXT ACTION: Work out what to show based on the selected plan's progress and status.
   const nextStep = plan
     ? plan.status === "COMPLETED"
       ? "Your induction is complete. Your certificate is ready."
@@ -632,6 +656,7 @@ export default function App() {
           ? "All required milestones are satisfied. Submit your dossier for final review."
           : "Complete the remaining mandatory requirements to submit your induction."
     : "";
+  // DOSSIER SUBMIT BUTTON: UI conditions decide availability here. Services.submit enforces readiness on the server.
   const submitButton =
     plan && ["NEW_FACULTY", "HR_COORDINATOR"].includes(u.role) && !locked ? (
       <button
@@ -647,6 +672,7 @@ export default function App() {
         Submit for final review <ArrowUpRight size={16} />
       </button>
     ) : null;
+  // DOCUMENT PICKER: Validate the file and show its hash before upload. The backend checks the upload again.
   async function chooseFile(f: File | undefined) {
     if (!f) return;
     setError("");
@@ -670,6 +696,7 @@ export default function App() {
       false,
     );
   }
+  // SHARED TASK TABLE: Change common task cards, status, and empty-list messages here.
   const taskTable = (
     rows: TaskProgress[],
     actions: (t: TaskProgress) => ReactNode,
@@ -728,6 +755,7 @@ export default function App() {
       {!rows.length && <Empty title="No matching requirements" />}
     </div>
   );
+  // COMPLIANCE COUNTS: Count pending mandatory tasks and check their due dates for overdue work.
   const compliance = (id: string) => {
     const pending = s.tasks.filter(
       (t) =>
@@ -742,7 +770,9 @@ export default function App() {
         .length,
     };
   };
+  // EDIT A SCREEN: Search for actualPage followed by its page key. Each branch below renders one sidebar screen.
   let content: ReactNode;
+  // FACULTY DASHBOARD AND ROLE HOME PAGES: Edit progress cards, next steps, and role summaries here.
   if (actualPage === "overview") {
     if (u.role === "NEW_FACULTY" && plan && stats) {
       content = (
@@ -1039,7 +1069,7 @@ export default function App() {
             <div>
               <strong>About this prototype</strong>
               <p>
-                Changes stay in this browser and update across demo accounts.
+                Changes are stored by the local FIMS server and shared across demo accounts.
                 Switch accounts in the header to follow the full induction
                 workflow.
               </p>
@@ -1048,6 +1078,7 @@ export default function App() {
         </>
       );
     }
+  // MY DOCUMENTS: Edit the faculty checklist, upload entry point, and document history here.
   } else if (actualPage === "documents")
     content = (
       <>
@@ -1127,6 +1158,7 @@ export default function App() {
         )}
       </>
     );
+  // HR DOCUMENT QUEUE: Edit the list of uploaded documents waiting for HR review here.
   else if (actualPage === "verification")
     content = section(
       "Verification queue",
@@ -1187,6 +1219,7 @@ export default function App() {
         )}
       </div>,
     );
+  // MENTORSHIP SCREEN: Edit activity cards, review buttons, and the interaction timeline here.
   else if (actualPage === "mentorship")
     content = plan ? (
       <>
@@ -1276,6 +1309,7 @@ export default function App() {
     ) : (
       <Empty title="No assigned mentees" />
     );
+  // ORIENTATION AND TRAINING: Edit session cards and attendance controls here.
   else if (actualPage === "training")
     content = (
       <>
@@ -1405,6 +1439,7 @@ export default function App() {
         )}
       </>
     );
+  // FACULTY SUBMISSION: The layout lives in FacultySubmission in DossierPages.tsx.
   else if (actualPage === "approvals" && u.role === "NEW_FACULTY")
     content = plan ? (
       <FacultySubmission
@@ -1426,6 +1461,7 @@ export default function App() {
         children="Contact HR to initialize your induction plan."
       />
     );
+  // HR INDUCTION RECORDS: The queue and detail layout live in HRInductionRecords in DossierPages.tsx.
   else if (actualPage === "approvals" && u.role === "HR_COORDINATOR")
     content = (
       <HRInductionRecords
@@ -1449,6 +1485,7 @@ export default function App() {
         viewEvidence={(id) => open("activity", id)}
       />
     );
+  // HOD DOSSIER REVIEW: Edit the evidence and approval controls here. Backend eligibility is checked in Services.approve.
   else if (actualPage === "approvals")
     content = plan ? (
       <>
@@ -1580,6 +1617,7 @@ export default function App() {
     ) : (
       <Empty title="No dossiers in your scope" />
     );
+  // CERTIFICATE SCREEN: Edit the download UI here. The PDF design is in backend/certificate.ts.
   else if (actualPage === "certificate") {
     const certificates = s.certificates.filter((c) =>
       plans.some((p) => p.id === c.planId),
@@ -1667,6 +1705,7 @@ export default function App() {
         }
       />
     );
+  // FACULTY AND MENTORS: Edit HR's onboarding entry point, faculty list, and assignment history here.
   } else if (actualPage === "people")
     content = (
       <>
@@ -1759,6 +1798,7 @@ export default function App() {
         )}
       </>
     );
+  // ADMIN SETTINGS: Edit the account and checklist template screens here.
   else if (actualPage === "settings")
     content = (
       <>
@@ -1840,6 +1880,7 @@ export default function App() {
         )}
       </>
     );
+  // NOTIFICATIONS: Edit the list and read-state controls here. The server creates notification messages.
   else if (actualPage === "notifications")
     content = section(
       "Your updates",
@@ -1888,6 +1929,7 @@ export default function App() {
       ...s.dossiers.filter((d) => planIds.has(d.planId)).map((d) => d.id),
       ...s.documents.filter((d) => taskIds.has(d.taskId)).map((d) => d.id),
     ]);
+    // AUDIT SEARCH: Filter event text and limit the list to records visible to the current role.
     const audits = s.audit.filter(
       (a) =>
         (["HR_COORDINATOR", "ADMIN"].includes(u.role) ||
@@ -2025,6 +2067,7 @@ export default function App() {
       </>
     );
   }
+  // EDIT A POPUP: Search for modal.kind and the popup name, such as upload, review-doc, approve, or onboard.
   const modalTask = modal?.id ? s.tasks.find((t) => t.id === modal.id) : null;
   const text = (d: FormData, k: string) => String(d.get(k) || "");
   let modalContent: ReactNode = null;
@@ -2034,6 +2077,7 @@ export default function App() {
         Cancel
       </button>
     );
+    // UPLOAD POPUP: Change the instructions, file picker, hash preview, or submit-button behavior here.
     if (modal.kind === "upload")
       modalContent = (
         <>
@@ -2088,6 +2132,7 @@ export default function App() {
           </div>
         </>
       );
+    // VERIFY OR REJECT POPUP: Decision choices and remarks are here. The backend requires a reason for rejection.
     if (modal.kind === "review-doc") {
       const d = s.documents.find((d) => d.id === modal.id)!;
       modalContent = (
@@ -2148,6 +2193,7 @@ export default function App() {
         </>
       );
     }
+    // DOCUMENT PREVIEW POPUP: Show the selected file and its download controls.
     if (modal.kind === "preview") {
       const d = s.documents.find((d) => d.id === modal.id)!;
       modalContent = (
@@ -2178,6 +2224,7 @@ export default function App() {
         </>
       );
     }
+    // MENTOR POPUPS: Read evidence, enter a readiness rating, request revision, or save meeting notes.
     if (["activity", "mentor-review", "meeting"].includes(modal.kind)) {
       const i = s.interactions.find((i) => i.taskId === modal.id);
       modalContent = (
@@ -2254,6 +2301,7 @@ export default function App() {
         </>
       );
     }
+    // RETURN OR WAIVER POPUP: Both actions require text explaining the decision.
     if (["return", "waiver"].includes(modal.kind))
       modalContent = (
         <Form
@@ -2282,6 +2330,7 @@ export default function App() {
           </Field>
         </Form>
       );
+    // FINAL APPROVAL POPUP: Edit the confirmation wording and optional HOD remarks here.
     if (modal.kind === "approve")
       modalContent = (
         <>
@@ -2317,6 +2366,7 @@ export default function App() {
           </Form>
         </>
       );
+    // MENTOR REASSIGNMENT POPUP: Edit available mentor choices and the reason field.
     if (modal.kind === "assign") {
       const f = s.faculty.find((f) => f.id === modal.id)!;
       modalContent = (
@@ -2361,6 +2411,7 @@ export default function App() {
         </Form>
       );
     }
+    // ONBOARD FACULTY FORM: Add or change fields here. For a new saved value, follow the onSubmit call into backend/services.ts and shared/domain.ts.
     if (modal.kind === "onboard")
       modalContent = (
         <Form
@@ -2411,6 +2462,7 @@ export default function App() {
           </Field>
         </Form>
       );
+    // CREATE SESSION FORM: Edit the title, date, venue, and required/optional controls here.
     if (modal.kind === "session")
       modalContent = (
         <Form
@@ -2444,6 +2496,7 @@ export default function App() {
           </label>
         </Form>
       );
+    // MANAGE ACCOUNT FORM: Change the role selector or active-account control here.
     if (modal.kind === "account") {
       const target = s.users.find((u) => u.id === modal.id)!;
       modalContent = (
@@ -2491,6 +2544,7 @@ export default function App() {
         </Form>
       );
     }
+    // ADD CHECKLIST ITEM FORM: Edit the requirement title, target department, pillar, and mandatory flag here.
     if (modal.kind === "template")
       modalContent = (
         <Form
@@ -2534,6 +2588,7 @@ export default function App() {
           </label>
         </Form>
       );
+    // DEMO RESET CONFIRMATION: The server restores the seed records and clears demo sessions.
     if (modal.kind === "reset")
       modalContent = (
         <>
@@ -2550,7 +2605,6 @@ export default function App() {
               onClick={() =>
                 void run(async () => {
                   await reset();
-                  selectAccount(null);
                   setUser(null);
                 }, "Demo restored.")
               }
@@ -2561,6 +2615,7 @@ export default function App() {
         </>
       );
   }
+  // POPUP TITLES: The dialog name displayed above each popup is defined here.
   const dialogTitles: Record<string, string> = {
     upload: "Upload a document",
     "review-doc": "Review document",
@@ -2638,7 +2693,7 @@ export default function App() {
             <ShieldCheck size={18} />
             <div>
               <strong>Local prototype</strong>
-              <small>Saved in this browser</small>
+              <small>Saved on the FIMS server</small>
             </div>
           </div>
           <button
@@ -2713,7 +2768,7 @@ export default function App() {
             <span>{roles[u.role]}</span>
             <span>
               <span className="live-dot" />
-              Saved in this browser
+              Saved on the FIMS server
             </span>
           </div>
           {actualPage !== "overview" && (

@@ -7,8 +7,8 @@ import {
   now,
   uid,
   progress,
-} from "./domain";
-import { commit, load } from "./repository";
+} from "../shared/domain.ts";
+import { commit, load } from "./repository.ts";
 import {
   principal,
   allow,
@@ -16,10 +16,10 @@ import {
   getSession,
   visiblePlans,
   type Session,
-} from "./gateway";
-import { sha256, createCertificate } from "./certificate";
-const INVALID_FILE =
-  "Invalid format or file exceeds 5MB limit. Please upload PDF, JPG, or PNG.";
+} from "./gateway.ts";
+import { createCertificate } from "./certificate.ts";
+import { validateFile } from "../shared/files.ts";
+// REQUIRED TEXT: Reject blank text, including input that contains only spaces. Callers supply the message shown to the user.
 const required = (
   s: string,
   message = "Please enter the required remarks.",
@@ -32,6 +32,7 @@ function planFor(s: State, taskId: string) {
   if (!t) throw new Error("Checklist item not found.");
   return { t, p: s.plans.find((p) => p.id === t.planId)! };
 }
+// LOCKED PLANS: Evidence changes are blocked during HOD review and after completion or archival.
 function editable(p: InductionPlan) {
   if (["COMPLETED", "ARCHIVED", "PENDING_HOD_APPROVAL"].includes(p.status))
     throw new Error(
@@ -92,48 +93,17 @@ export function reminderCandidates(s: State, u: UserAccount) {
       ),
   );
 }
-export async function validateFile(file: File) {
-  if (!file.size)
-    throw new Error(
-      "The selected file is empty. Please choose a valid document.",
-    );
-  if (file.size > 5242880) throw new Error(INVALID_FILE);
-  const bytes = await file.arrayBuffer();
-  const a = new Uint8Array(bytes);
-  let mime = "";
-  if (
-    a[0] === 0x25 &&
-    a[1] === 0x50 &&
-    a[2] === 0x44 &&
-    a[3] === 0x46 &&
-    a[4] === 0x2d
-  )
-    mime = "application/pdf";
-  if (a[0] === 0xff && a[1] === 0xd8 && a[2] === 0xff) mime = "image/jpeg";
-  if ([137, 80, 78, 71, 13, 10, 26, 10].every((n, i) => a[i] === n))
-    mime = "image/png";
-  const ext = file.name.split(".").pop()?.toLowerCase();
-  if (
-    !mime ||
-    !{
-      "application/pdf": ["pdf"],
-      "image/jpeg": ["jpg", "jpeg"],
-      "image/png": ["png"],
-    }[mime]?.includes(ext || "") ||
-    (file.type &&
-      file.type !== mime &&
-      file.type !== "application/octet-stream")
-  )
-    throw new Error(INVALID_FILE);
-  return { mime, hash: await sha256(bytes) };
-}
+// WORKFLOW RULES: The API uses these methods to make changes. Update permission and validation rules here when behavior changes.
 export class Services {
   private session: Session;
-  constructor(private version: number) {
+  private version: number;
+  constructor(version: number) {
+    this.version = version;
     const session = getSession();
     if (!session) throw new Error("Please log in again.");
     this.session = { ...session };
   }
+  // Run each change against the current saved version and check the signed-in account before changing records.
   private write(fn: (s: State, u: UserAccount) => void) {
     return commit(this.version, (s) => {
       const u = principal(s, this.session);
@@ -146,6 +116,7 @@ export class Services {
       throw new Error("This record changed. Refresh and try again.");
     return { s, u: principal(s, this.session) };
   }
+  // Create due-soon and overdue notices. reminderCandidates above chooses which tasks qualify.
   reminders() {
     return this.write((s, u) => {
       for (const t of reminderCandidates(s, u)) {
@@ -175,6 +146,7 @@ export class Services {
       }
     });
   }
+  // Record manual training completion for requirements without a scheduled session.
   completeTraining(taskId: string, completed: boolean) {
     return this.write((s, u) => {
       allow(u, "HR_COORDINATOR");
@@ -198,6 +170,7 @@ export class Services {
       notify(s, owner(s, p), "Training status updated.", "training");
     });
   }
+  // FACULTY DOCUMENT UPLOAD: Validate the file, store its bytes, and create a pending HR review.
   async upload(taskId: string, file: File) {
     const { s, u } = await this.read();
     allow(u, "NEW_FACULTY");
@@ -233,6 +206,7 @@ export class Services {
         status: "UPLOADED_PENDING_VERIFICATION",
         remarks: "",
       });
+      // Receiving a file puts the checklist item into the review stage. HR verification completes this requirement.
       t.status = "UPLOADED";
       t.remarks = "";
       audit(s, u, "DOCUMENT_UPLOADED", taskId, file.name);
@@ -244,6 +218,7 @@ export class Services {
       );
     });
   }
+  // HR VERIFICATION: Approve or reject an upload, update the task, and notify the faculty member.
   reviewDocument(docId: string, approve: boolean, remarks: string) {
     return this.write((s, u) => {
       allow(u, "HR_COORDINATOR");
@@ -253,7 +228,9 @@ export class Services {
       editable(p);
       if (d.status !== "UPLOADED_PENDING_VERIFICATION")
         throw new Error("This document has already been reviewed.");
+      // DOCUMENT REJECTION RULE: Change this message or requirement here and keep the review popup in sync.
       if (!approve) required(remarks, "A rejection reason is required.");
+      // Update both the document's review status and its linked checklist item below.
       d.status = approve ? "VERIFIED" : "REJECTED";
       d.remarks = remarks.trim();
       t.status = approve ? "VERIFIED" : "REVISION_REQUIRED";
@@ -275,6 +252,7 @@ export class Services {
       );
     });
   }
+  // MENTOR SIGN-OFF: Validate the assigned mentor and feedback, then complete the activity or request revision.
   reviewMentorship(
     taskId: string,
     approve: boolean,
@@ -308,6 +286,7 @@ export class Services {
       )
         throw new Error("Readiness must be between 1 and 5.");
       interaction.readiness = approve ? readiness : undefined;
+      // A mentor decision affects both the activity evidence and the task counted in progress.
       interaction.status = approve ? "APPROVED" : "REVISION_REQUIRED";
       interaction.remarks = remarks.trim();
       interaction.assignmentId = assignment.id;
@@ -331,6 +310,7 @@ export class Services {
       );
     });
   }
+  // Save or resubmit faculty activity evidence so the mentor can review it.
   meeting(taskId: string, notes: string) {
     return this.write((s, u) => {
       allow(u, "NEW_FACULTY", "FACULTY_MENTOR");
@@ -378,6 +358,7 @@ export class Services {
         );
     });
   }
+  // HR ATTENDANCE: Record presence or absence and update the linked training task.
   attendance(sessionId: string, facultyId: string, present: boolean) {
     return this.write((s, u) => {
       allow(u, "HR_COORDINATOR");
@@ -406,6 +387,7 @@ export class Services {
         };
         s.attendance.push(a);
       }
+      // Attendance is saved here. The linked training task is marked complete when the faculty member is present.
       a.status = present ? "PRESENT" : "ABSENT";
       a.by = u.id;
       a.at = now();
@@ -419,6 +401,7 @@ export class Services {
       );
     });
   }
+  // HOD TRAINING WAIVER: Record a justified exception for an eligible training task.
   waiver(taskId: string, reason: string) {
     return this.write((s, u) => {
       allow(u, "HOD");
@@ -443,6 +426,7 @@ export class Services {
       );
     });
   }
+  // DOSSIER SUBMISSION: Check readiness and move the record into the HOD review queue.
   submit(planId: string) {
     return this.write((s, u) => {
       allow(u, "NEW_FACULTY", "HR_COORDINATOR");
@@ -474,6 +458,7 @@ export class Services {
         remarks: "Submitted for final review",
         at: now(),
       });
+      // Ready and submitted are separate states. This transition moves the dossier into HOD review.
       p.status = "PENDING_HOD_APPROVAL";
       audit(s, u, "DOSSIER_SUBMITTED", d.id);
       const f = s.faculty.find((f) => f.id === p.facultyId)!;
@@ -485,6 +470,7 @@ export class Services {
       );
     });
   }
+  // HOD RETURN: Send a pending dossier back with instructions for revision.
   returnDossier(planId: string, remarks: string) {
     return this.write((s, u) => {
       allow(u, "HOD");
@@ -519,6 +505,7 @@ export class Services {
       );
     });
   }
+  // FINAL APPROVAL: Check that the dossier is ready, create the PDF, and save it with the completed plan.
   async approve(planId: string, remarks: string) {
     const { s, u } = await this.read();
     allow(u, "HOD");
@@ -532,6 +519,7 @@ export class Services {
         new Date().getFullYear() +
         "-" +
         uid().slice(0, 8).toUpperCase();
+    // Generate the PDF before saving the approval. A PDF failure leaves the dossier pending.
     const certificate = await createCertificate(s, p, id, at, u.id);
     return this.write((s, u) => {
       allow(u, "HOD");
@@ -559,7 +547,9 @@ export class Services {
       );
     });
   }
+  // The server checks all required pillars before it allows final approval.
   private approvalGate(s: State, p: InductionPlan) {
+    // APPROVAL REQUIREMENTS: Check the underlying tasks. The rounded percentage displayed on screen is only a summary.
     if (!progress(s, p.id).eligible)
       throw new Error(
         "Cannot approve induction: Milestones pending completion.",
@@ -573,6 +563,7 @@ export class Services {
         "Dossier is not awaiting approval or has already been certified.",
       );
   }
+  // MENTOR ASSIGNMENT: Validate the new mentor and keep previous assignments in the history.
   assign(facultyId: string, mentorId: string, reason: string) {
     return this.write((s, u) => {
       allow(u, "HR_COORDINATOR");
@@ -610,6 +601,7 @@ export class Services {
       );
     });
   }
+  // Create an orientation session and add its requirement to open induction plans.
   createSession(
     title: string,
     scheduled: string,
@@ -662,6 +654,7 @@ export class Services {
       );
     });
   }
+  // HR ONBOARDING: Create the account, faculty profile, induction plan, and task rows together.
   onboard(
     name: string,
     email: string,
@@ -671,6 +664,7 @@ export class Services {
   ) {
     return this.write((s, u) => {
       allow(u, "HR_COORDINATOR");
+      // ONBOARDING VALIDATION: Name, unique email, department, and mentor are checked before any records are created.
       required(name, "Name is required.");
       if (
         !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ||
@@ -756,6 +750,7 @@ export class Services {
       );
     });
   }
+  // ADMIN ACCOUNTS: Validate role changes and invalidate sessions for the changed account.
   updateUser(userId: string, role: Role, active: boolean) {
     return this.write((s, u) => {
       allow(u, "ADMIN");
@@ -809,6 +804,7 @@ export class Services {
       audit(s, u, "ACCOUNT_UPDATED", userId, role + "; active=" + active);
     });
   }
+  // ADMIN CHECKLIST: Add a new template used when creating future induction plans.
   template(
     title: string,
     pillar: "Documents" | "Mentorship" | "Training",
@@ -818,6 +814,8 @@ export class Services {
     return this.write((s, u) => {
       allow(u, "ADMIN");
       required(title, "A template title is required.");
+      if (!["Documents", "Mentorship", "Training"].includes(pillar))
+        throw new Error("Choose a valid checklist category.");
       if (departmentId && !s.departments.some((d) => d.id === departmentId))
         throw new Error("Choose a valid department.");
       s.templates.push({
@@ -837,6 +835,7 @@ export class Services {
       );
     });
   }
+  // Only the owner of a notification can mark it as read.
   readNotification(id: string) {
     return this.write((s, u) => {
       const n = s.notifications.find((n) => n.id === id && n.userId === u.id);
@@ -844,6 +843,7 @@ export class Services {
       n.read = true;
     });
   }
+  // File downloads check the user's role and access to the faculty plan before returning bytes.
   async document(id: string) {
     const { s, u } = await this.read();
     const d = s.documents.find((d) => d.id === id);

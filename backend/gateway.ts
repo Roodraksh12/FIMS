@@ -1,27 +1,32 @@
-import type { State, Role, UserAccount, InductionPlan } from "./domain";
+import { AsyncLocalStorage } from "node:async_hooks";
+import type {
+  State,
+  Role,
+  UserAccount,
+  InductionPlan,
+} from "../shared/domain.ts";
 export interface Session {
   userId: string;
   version: number;
   nonce: string;
 }
-let session: Session | null = null;
-try {
-  session = JSON.parse(localStorage.getItem("fims-session") || "null");
-} catch {
-  /* no persisted session */
-}
-export const getSession = () => session;
+// Keep each API request's identity separate, even when requests are handled at the same time.
+const requestSession = new AsyncLocalStorage<Session | null>();
+let testSession: Session | null = null;
+export const withSession = <T>(session: Session | null, action: () => T) =>
+  requestSession.run(session, action);
+export const getSession = () => {
+  const session = requestSession.getStore();
+  return session === undefined ? testSession : session;
+};
 export function selectAccount(u: UserAccount | null) {
-  session = u
+  testSession = u
     ? { userId: u.id, version: u.sessionVersion, nonce: crypto.randomUUID() }
     : null;
-  try {
-    localStorage.setItem("fims-session", JSON.stringify(session));
-  } catch {
-    /* session remains in memory */
-  }
 }
+// Look up the current user and reject expired sessions or disabled accounts.
 export function principal(s: State, expected?: Session): UserAccount {
+  const session = getSession();
   if (!session || (expected && expected.nonce !== session.nonce))
     throw new Error(
       "Your session changed. Please retry from the current account.",
@@ -35,6 +40,7 @@ export function allow(u: UserAccount, ...permitted: Role[]) {
   if (!permitted.includes(u.role))
     throw new Error("Your account is not authorized for this action.");
 }
+// DATA PERMISSIONS: Decide which faculty plans a role may access. The sidebar menu is only a UI setting.
 export function scope(s: State, u: UserAccount, p: InductionPlan) {
   const f = s.faculty.find((f) => f.id === p.facultyId)!;
   if (u.role === "NEW_FACULTY" && f.userId === u.id) return;

@@ -1,3 +1,4 @@
+// SHARED DATA TYPES: The frontend and backend use these same role, status, and record definitions.
 export type Role =
   "NEW_FACULTY" | "FACULTY_MENTOR" | "HOD" | "HR_COORDINATOR" | "ADMIN";
 export const roles: Record<Role, string> = {
@@ -146,6 +147,7 @@ export interface AuditLog {
   remarks: string;
   at: string;
 }
+// A complete workspace snapshot groups all records. The API sends each user the records they can access.
 export interface State {
   version: number;
   users: UserAccount[];
@@ -186,14 +188,18 @@ export const time = (s: string) =>
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(s));
-export function progress(s: State, planId: string) {
+// EDIT PROGRESS RULES: Count satisfied mandatory tasks for the overall progress and each pillar.
+export function progress(s: Pick<State, "tasks" | "templates">, planId: string) {
+  // Include mandatory tasks for this plan. Optional checklist items do not affect readiness.
   const tasks = s.tasks.filter(
     (t) =>
       t.planId === planId &&
       s.templates.find((x) => x.id === t.templateId)?.mandatory,
   );
+  // A task counts as done when verified, completed, or waived. Uploading a file alone does not count.
   const satisfied = (t: TaskProgress) =>
     !!t.waiver || ["VERIFIED", "COMPLETED"].includes(t.status);
+  // Calculate the percentage as satisfied divided by total. A pillar with no mandatory tasks is already satisfied.
   const count = (a: TaskProgress[]) => ({
     done: a.filter(satisfied).length,
     total: a.length,
@@ -214,8 +220,12 @@ export function progress(s: State, planId: string) {
     ) as Record<Pillar, ReturnType<typeof count>>,
   };
 }
+// EDIT DEMO DATA: These fictional accounts, tasks, and plans are loaded on first startup or after Reset demo data.
 export function seed(): State {
   const at = now();
+  // DEMO DEADLINE: Seed tasks are due 14 days after the data is created or reset.
+  const deadline = new Date(Date.now() + 14 * 86400000).toISOString().slice(0, 10);
+  // DEMO USERS: Each row supplies ID, display name, email prefix, role, and department.
   const users: UserAccount[] = [
     ["aarav", "Dr. Aarav Sharma", "aarav.sharma", "NEW_FACULTY", "cse"],
     ["rajesh", "Prof. Rajesh Gupta", "rgupta", "FACULTY_MENTOR", "cse"],
@@ -248,6 +258,7 @@ export function seed(): State {
       departmentId: u.departmentId,
       inductee: u.role === "NEW_FACULTY",
     }));
+  // DEMO CHECKLIST: Edit task titles, categories, and mandatory flags here. Reset to see seed changes in an existing database.
   const templates: ChecklistTaskTemplate[] = [
     {
       id: "degree",
@@ -313,8 +324,9 @@ export function seed(): State {
       facultyId: f.id,
       status: "IN_PROGRESS",
       startDate: "2026-10-01",
-      deadline: "2026-11-15",
+      deadline,
     }));
+  // STARTING TASK STATUS: Aarav has pre-completed requirements so the demo can focus on upload, mentor sign-off, and approval.
   const tasks: TaskProgress[] = plans.flatMap((p) =>
     templates.map((t) => ({
       id: p.id + "-" + t.id,
@@ -329,7 +341,7 @@ export function seed(): State {
               ? "VERIFIED"
               : "COMPLETED"
         : "PENDING") as TaskStatus,
-      due: "2026-11-15",
+      due: deadline,
       remarks: "",
     })),
   );
@@ -361,6 +373,7 @@ export function seed(): State {
       at,
       status: t.status === "COMPLETED" ? "APPROVED" : "PENDING_REVIEW",
     }));
+  // DEMO WORKSHOPS: Edit the workshops shown on Orientation and Training here.
   const sessions: OrientationSession[] = [
     {
       id: "s-policy",

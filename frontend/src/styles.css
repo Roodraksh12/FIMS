@@ -1,3 +1,4 @@
+/* BASE STYLES: Shared colors and page defaults. Check campus.css too because it loads after this file. */
 :root {
   font-family: "Segoe UI", Arial, sans-serif;
   color: #253d39;
@@ -279,6 +280,7 @@ strong {
   display: flex;
   min-height: 100vh;
 }
+/* Sidebar layout and navigation styling. */
 .sidebar {
   width: 236px;
   position: fixed;
@@ -1419,6 +1421,7 @@ dialog::backdrop {
   height: 65px;
   object-fit: contain;
 }
+/* Base layout for the sign-in screen. Search for login-form to find the inputs and button styles. */
 .login {
   display: grid;
   grid-template-columns: 1.08fr 1fr;
@@ -2179,6 +2182,7 @@ dialog::backdrop {
     font-size: 9px;
   }
 }
+/* Respect the operating system setting for reduced animation. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
