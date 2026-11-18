@@ -11,6 +11,28 @@ export type Workspace = Omit<State, "documents" | "certificates"> & {
 
 export async function load(): Promise<Workspace> {
   const token = getToken();
+  const signedOut = () =>
+    ({
+      currentUser: null,
+      remindersDue: false,
+      version: 0,
+      users: [],
+      faculty: [],
+      departments: [],
+      plans: [],
+      templates: [],
+      tasks: [],
+      documents: [],
+      assignments: [],
+      interactions: [],
+      sessions: [],
+      attendance: [],
+      dossiers: [],
+      certificates: [],
+      notifications: [],
+      audit: [],
+    }) as Workspace;
+  if (!token) return signedOut();
   try {
     return await request<Workspace>("/state");
   } catch (error) {
@@ -20,7 +42,7 @@ export async function load(): Promise<Workspace> {
       token === getToken()
     ) {
       clearToken();
-      return request<Workspace>("/state");
+      return signedOut();
     }
     throw error;
   }

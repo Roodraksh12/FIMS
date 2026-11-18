@@ -12,10 +12,17 @@ import {
   withSession,
   type Session,
 } from "./gateway.ts";
-import { load, reset } from "./repository.ts";
+import {
+  load,
+  reset,
+  provisionCredentials,
+  verifyPassword,
+} from "./repository.ts";
 import { Services, reminderCandidates } from "./services.ts";
 
-const sessions = new Map<string, Session>();
+await provisionCredentials();
+const loginAttempts = new Map<string, { count: number; until: number }>();
+const sessions = new Map<string, Session & { expiresAt: number }>();
 // API ACTIONS: This list maps allowed client action names to the expected argument types.
 const operations = {
   reminders: [],
@@ -107,35 +114,57 @@ const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", "http://localhost");
   const token =
     request.headers.authorization?.match(/^Bearer (.+)$/)?.[1] ?? "";
+  const storedSession = sessions.get(token);
+  if (storedSession && storedSession.expiresAt <= Date.now())
+    sessions.delete(token);
   const session = sessions.get(token) ?? null;
   try {
     await withSession(session, async () => {
       const route = request.method + " " + url.pathname;
       if (route === "GET /api/health")
         return json(response, 200, { status: "ok" });
-      // DEMO SIGN-IN: The quick picker and email/password form both use this route.
+      // SIGN-IN: Verify credentials before issuing an expiring session.
       if (route === "POST /api/session") {
         const input = JSON.parse((await body(request, 8192)).toString());
         const state = await load();
+        if (
+          typeof input?.email !== "string" ||
+          typeof input?.password !== "string" ||
+          input.password.length > 256 ||
+          input.email.length > 254
+        ) {
+          return json(response, 401, { error: "Invalid email or password." });
+        }
+        const loginKey = input.email.trim().toLowerCase();
+        const previousAttempt = loginAttempts.get(loginKey);
+        if (previousAttempt && previousAttempt.until <= Date.now())
+          loginAttempts.delete(loginKey);
+        if ((loginAttempts.get(loginKey)?.count ?? 0) >= 10)
+          return json(response, 429, {
+            error: "Too many sign-in attempts. Try again in 15 minutes.",
+          });
         const user = state.users.find(
           (account) =>
             account.active &&
-            (account.id === input.demoId ||
-              (typeof input.email === "string" &&
-                account.email.toLowerCase() ===
-                  input.email.trim().toLowerCase() &&
-                input.password === "Fims@2026")),
+            account.email.toLowerCase() === input.email.trim().toLowerCase(),
         );
-        if (!user)
-          return json(response, 401, {
-            error: "Use a listed demo email and password Fims@2026.",
-          });
+        if (!user || !verifyPassword(user.id, input.password)) {
+          const attempt = loginAttempts.get(loginKey) ?? {
+            count: 0,
+            until: Date.now() + 15 * 60 * 1000,
+          };
+          attempt.count++;
+          loginAttempts.set(loginKey, attempt);
+          return json(response, 401, { error: "Invalid email or password." });
+        }
+        loginAttempts.delete(loginKey);
         const nextToken = randomUUID();
         sessions.delete(token);
         sessions.set(nextToken, {
           userId: user.id,
           version: user.sessionVersion,
           nonce: nextToken,
+          expiresAt: Date.now() + 8 * 60 * 60 * 1000,
         });
         return json(response, 200, { token: nextToken, user });
       }
@@ -159,6 +188,8 @@ const server = createServer(async (request, response) => {
       }
 
       if (route === "GET /api/state") {
+        if (!session)
+          return json(response, 401, { error: "Please log in again." });
         return json(response, 200, workspace(state, Boolean(session)));
       }
       if (route === "POST /api/reset") {
@@ -232,6 +263,7 @@ const server = createServer(async (request, response) => {
           service,
           args.map((arg) => arg ?? undefined) as never[],
         );
+        if (name === "onboard") await provisionCredentials();
         return json(response, 200, null);
       }
       return json(response, 404, { error: "Unknown API route." });

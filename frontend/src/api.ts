@@ -40,9 +40,7 @@ export function post<T>(path: string, body: unknown) {
   });
 }
 
-export async function signIn(
-  input: { demoId: string } | { email: string; password: string },
-) {
+export async function signIn(input: { email: string; password: string }) {
   const { token, user } = await post<{ token: string; user: UserAccount }>(
     "/session",
     input,

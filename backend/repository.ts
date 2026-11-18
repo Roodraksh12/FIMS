@@ -1,3 +1,4 @@
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -72,4 +73,36 @@ export async function reset() {
   return commit(previous.version, (state) => {
     Object.assign(state, seed(), { version: previous.version });
   });
+}
+
+// Password hashes stay in a server-only table and never enter workspace responses.
+db.exec(
+  "CREATE TABLE IF NOT EXISTS credentials (user_id TEXT PRIMARY KEY, salt TEXT NOT NULL, hash TEXT NOT NULL)",
+);
+export function verifyPassword(userId: string, password: string) {
+  const row = db
+    .prepare("SELECT salt, hash FROM credentials WHERE user_id = ?")
+    .get(userId);
+  if (!row) return false;
+  return timingSafeEqual(
+    scryptSync(password, String(row.salt), 64),
+    Buffer.from(String(row.hash), "hex"),
+  );
+}
+export async function provisionCredentials() {
+  const state = await load();
+  const insert = db.prepare(
+    "INSERT OR IGNORE INTO credentials VALUES (?, ?, ?)",
+  );
+  for (const user of state.users) {
+    if (
+      db
+        .prepare("SELECT user_id FROM credentials WHERE user_id = ?")
+        .get(user.id)
+    )
+      continue;
+    const salt = randomBytes(16).toString("hex");
+    const password = user.email.split("@")[0] + "@2026";
+    insert.run(user.id, salt, scryptSync(password, salt, 64).toString("hex"));
+  }
 }

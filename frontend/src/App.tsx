@@ -295,6 +295,7 @@ export default function App() {
   // SIGN-IN INPUT STATE: These hold the typed email and password. Add local form options here, such as password visibility.
   const [loginEmail, setLoginEmail] = useState(""),
     [loginPassword, setLoginPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   // LOAD THE WORKSPACE: Refresh the signed-in user's records. Background refresh lets different browser sessions see saved changes.
   const refresh = async (background = false) => {
     const token = getToken();
@@ -311,6 +312,7 @@ export default function App() {
           : result,
       );
       setUser(result.currentUser);
+      setError((previous) => previous === "Could not reach the FIMS server. Check that npm run dev is running." ? "" : previous);
     } catch {
       if (!background) setError("Could not reach the FIMS server. Check that npm run dev is running.");
     }
@@ -383,13 +385,15 @@ export default function App() {
       setBusy(false);
     }
   }
-  // SIGN-IN ACTION: The form sends credentials to the API. The quick-account buttons send a demo account ID.
-  const login = async (input: UserAccount | { email: string; password: string }) => {
+  // SIGN-IN ACTION: The form sends credentials to the API. The server verifies credentials before creating a session.
+  const login = async (input: { email: string; password: string }) => {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
-      await signIn("id" in input ? { demoId: input.id } : input);
+      await signIn(input);
+      setShowPassword(false);
+      setLoginPassword("");
       await refresh();
       setPlanId("p-aarav");
       setHrDossierId(null);
@@ -416,7 +420,6 @@ export default function App() {
       </div>
     );
   // EDIT THE SIGN-IN SCREEN: The block below contains the welcome text, email and password inputs, submit button, and demo accounts.
-  const accounts = state.users.filter((u) => u.active);
   if (!user)
     return (
       <main className="login">
@@ -485,17 +488,30 @@ export default function App() {
                   required
                 />
               </Field>
-              {/* PASSWORD FIELD: Its type hides the password. For a Show/Hide feature, use state for the type and put a type=button toggle after this Field. */}
-              <Field name="password" title="Password">
-                <input
-                  type="password"
-                  autoComplete="current-password"
-                  value={loginPassword}
-                  onChange={(e) => setLoginPassword(e.target.value)}
-                  required
-                  placeholder="Enter demo password"
-                />
-              </Field>
+              {/* PASSWORD FIELD: The button flips visibility without submitting the form. */}
+              <div className="field">
+                <label htmlFor="login-password">Password</label>
+                <div className="login-password-control">
+                  <input
+                    id="login-password"
+                    name="password"
+                    type={showPassword ? "text" : "password"}
+                    autoComplete="current-password"
+                    value={loginPassword}
+                    onChange={(e) => setLoginPassword(e.target.value)}
+                    placeholder="Enter your password"
+                    required
+                  />
+                  <button
+                    type="button"
+                    aria-controls="login-password"
+                    aria-label={showPassword ? "Hide password" : "Show password"}
+                    onClick={() => setShowPassword((visible) => !visible)}
+                  >
+                    {showPassword ? "Hide" : "Show"}
+                  </button>
+                </div>
+              </div>
               {error && (
                 <div role="alert" className="alert error">
                   {error}
@@ -506,26 +522,7 @@ export default function App() {
                 Sign in <ArrowRight size={18} />
               </button>
             </form>
-            <div className="divider">
-              <span>Try a demo account</span>
-            </div>
-            {/* DEMO ACCOUNT BUTTONS: The list below shows the first five active accounts. */}
-            <div className="demo-accounts">
-              {accounts.slice(0, 5).map((u) => (
-                <button key={u.id} onClick={() => login(u)}>
-                  <span className="avatar small">{initials(u.name)}</span>
-                  <span>
-                    <strong>{roles[u.role]}</strong>
-                    <small>{u.name}</small>
-                  </span>
-                  <ChevronRight size={17} />
-                </button>
-              ))}
-            </div>
-            <p className="fine">
-              Demo password: <strong>Fims@2026</strong>. All records are
-              fictional and stored by the local FIMS server.
-            </p>
+            <p className="fine">Sign in with the credentials assigned to your account.</p>
           </div>
         </section>
       </main>
@@ -1070,7 +1067,7 @@ export default function App() {
               <strong>About this prototype</strong>
               <p>
                 Changes are stored by the local FIMS server and shared across demo accounts.
-                Switch accounts in the header to follow the full induction
+                Sign out and sign in to another account to follow the full induction
                 workflow.
               </p>
             </div>
@@ -2726,24 +2723,7 @@ export default function App() {
             <strong>{pageLabel(actualPage)}</strong>
           </div>
           <div className="header-actions">
-            <span className="demo-chip">DEMO</span>
-            <label className="account-switch">
-              <span className="sr-only">Switch demo account</span>
-              <select
-                aria-label="Switch demo account"
-                value={u.id}
-                disabled={busy}
-                onChange={(e) =>
-                  login(s.users.find((u) => u.id === e.target.value)!)
-                }
-              >
-                {accounts.map((a) => (
-                  <option value={a.id} key={a.id}>
-                    {a.name} · {roles[a.role]}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <span className="account-identity">{u.name} · {roles[u.role]}</span>
             <button
               className="icon-button bell"
               aria-label={"Notifications, " + unread + " unread"}

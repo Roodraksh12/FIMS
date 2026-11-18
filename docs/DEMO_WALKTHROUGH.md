@@ -1,6 +1,6 @@
 # Demonstration walkthrough
 
-Run `npm.cmd run dev` from the project folder and open the printed URL. Sign in as Central Administration and use **Reset demo data** for a fresh run. For a two-window demo, keep Aarav in one window and Neha in an incognito window. After Aarav submits, the upload appears in Neha’s verification queue within a few seconds. Main demonstration: approximately 1–2 minutes once familiar with the account switcher.
+Run `npm.cmd run dev` from the project folder and open the printed URL. Sign in as Central Administration and use **Reset demo data** for a fresh run. For a two-window demo, keep Aarav in one window and Neha in an incognito window. After Aarav submits, the upload appears in Neha’s verification queue within a few seconds. Main demonstration: approximately 1–2 minutes once familiar with the sign-in steps.
 
 ## Core path
 
@@ -17,7 +17,7 @@ Run `npm.cmd run dev` from the project folder and open the printed URL. Sign in 
 - Mentor revision: Rajesh selects Request revision with guidance. Aarav selects Resubmit evidence, updates the notes, and submits. Rajesh can then review and sign off.
 - HOD return: after submission, Sunita returns with directives. Aarav sees the directives and can remediate/respond and explicitly resubmit. The decision history retains both submissions and return.
 - Training: Neha opens Orientation & training, selects a faculty record, and records presence/absence. Sunita can grant a justified task-specific waiver in her department. New sessions can be scheduled for open plans.
-- Onboarding: Neha opens Faculty & mentors → Onboard faculty; enters a unique email, department, and same-department mentor. A roadmap is initialized from templates. The new account becomes available in the switcher.
+- Onboarding: Neha opens Faculty & mentors → Onboard faculty; enters a unique email, department, and same-department mentor. A roadmap is initialized from templates. The new account can sign in with its email and initial password, using the convention documented in README.md.
 - Reassignment: Neha reassigns Aarav to Vikram with a reason; only one active pairing remains. Rajesh loses access to Aarav, while Vikram gains it.
 - Administration: Admin can add future-induction templates and edit account roles/access. Edited sessions are invalidated. Active mentors must be reassigned first.
 - Permission boundaries: select the ECE HOD to see only Kabir. Select Vikram before reassignment to see Ishita rather than Aarav. HR verification and admin settings are absent from faculty navigation. Services also reject direct unauthorized calls (automated tests).

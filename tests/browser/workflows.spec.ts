@@ -1,34 +1,41 @@
 import { test, expect, type Page } from "@playwright/test";
 import { mkdir } from "node:fs/promises";
 const artifacts = "tests/artifacts";
+import { seed } from "../../shared/domain";
+const demoUsers = seed().users;
 async function account(page: Page, id: string) {
+  if (
+    await page.getByRole("button", { name: "Sign out", exact: true }).count()
+  ) {
+    await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  }
+  const email = demoUsers.find((user) => user.id === id)?.email ?? id;
+  await page.getByRole("textbox", { name: "Institutional email" }).fill(email);
   await page
-    .getByRole("combobox", { name: "Switch demo account" })
-    .selectOption(id);
+    .getByLabel("Password", { exact: true })
+    .fill(email.split("@")[0] + "@2026");
+  await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(
-    page.getByRole("combobox", { name: "Switch demo account" }),
-  ).toHaveValue(id);
+    page.getByRole("button", { name: "Sign out", exact: true }),
+  ).toBeVisible();
 }
 async function nav(page: Page, name: string) {
   if (name === "Induction dossiers") {
-    const account = await page
-      .getByRole("combobox", { name: "Switch demo account" })
-      .locator("option:checked")
-      .textContent();
-    name = account?.includes("New faculty")
+    const identity = await page.locator(".account-identity").textContent();
+    name = identity?.includes("New faculty")
       ? "My submission"
-      : account?.includes("HR coordinator")
+      : identity?.includes("HR coordinator")
         ? "Induction records"
         : "Review & approve";
   }
   await page
     .getByRole("navigation", { name: "Main navigation" })
-    .getByRole("button", { name: new RegExp("^" + name + "(?:\\s*\\d+)?$") })
+    .getByRole("button", { name: new RegExp("^" + name + "(?: *[0-9]+)?$") })
     .click();
 }
 test.beforeEach(async ({ page, request }) => {
   const session = await request.post("/api/session", {
-    data: { demoId: "admin" },
+    data: { email: "admin@lnmiit.ac.in", password: "admin@2026" },
   });
   expect(session.ok()).toBe(true);
   const { token } = await session.json();
@@ -37,7 +44,7 @@ test.beforeEach(async ({ page, request }) => {
   });
   expect(reset.ok()).toBe(true);
   await page.goto("/");
-  await page.getByRole("button", { name: /New faculty Dr. Aarav/ }).click();
+  await account(page, "aarav");
   await expect(
     page.getByRole("heading", { name: "My induction" }),
   ).toBeVisible();
@@ -55,7 +62,7 @@ test("complete upload, verify, signoff, submit, cancel, approve and download wit
   const hrContext = await browser.newContext({ baseURL });
   const hr = await hrContext.newPage();
   await hr.goto("/");
-  await hr.getByRole("button", { name: /HR coordinator/ }).click();
+  await account(hr, "neha");
   await nav(hr, "Document verification");
   await expect(
     hr.getByRole("heading", { name: "The queue is clear" }),
@@ -357,9 +364,7 @@ test("HR onboarding, admin template configuration, training completion and repor
   const report = page.waitForEvent("download");
   await page.getByRole("button", { name: "Export CSV" }).click();
   expect((await report).suggestedFilename()).toBe("fims-induction-report.csv");
-  await page
-    .getByRole("combobox", { name: "Switch demo account" })
-    .selectOption({ label: "Dr. Test Faculty · New faculty" });
+  await account(page, "testfaculty@lnmiit.ac.in");
   await expect(
     page.getByRole("heading", { name: "My induction" }),
   ).toBeVisible();
@@ -552,4 +557,25 @@ test("HR forwards a cleared record while faculty tracks the submission", async (
   await expect(
     page.getByRole("button", { name: "Approve induction", exact: true }),
   ).toBeEnabled();
+});
+
+test("credentials are required and sign-out revokes the server session", async ({ page, request }) => {
+  await expect(page.getByRole("combobox", { name: "Switch demo account" })).toHaveCount(0);
+  expect((await request.get("/api/state")).status()).toBe(401);
+  expect((await request.post("/api/session", { data: { demoId: "admin" } })).status()).toBe(401);
+  expect((await request.post("/api/session", { data: { email: "admin@lnmiit.ac.in", password: "Fims@2026" } })).status()).toBe(401);
+  const login = await request.post("/api/session", { data: { email: "aarav.sharma@lnmiit.ac.in", password: "aarav.sharma@2026", role: "ADMIN" } });
+  expect(login.ok()).toBe(true);
+  const { token, user } = await login.json();
+  expect(user.role).toBe("NEW_FACULTY");
+  const headers = { Authorization: "Bearer " + token };
+  const state = await request.get("/api/state", { headers });
+  expect(state.ok()).toBe(true);
+  expect(JSON.stringify(await state.json())).not.toMatch(/password|scrypt|salt/);
+  expect((await request.post("/api/reset", { headers })).ok()).toBe(false);
+  expect((await request.delete("/api/session", { headers })).ok()).toBe(true);
+  expect((await request.get("/api/state", { headers })).status()).toBe(401);
+  await page.getByRole("button", { name: "Sign out", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Sign in", exact: true })).toBeVisible();
+  await expect(page.locator(".demo-accounts")).toHaveCount(0);
 });

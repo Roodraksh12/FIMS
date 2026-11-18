@@ -34,7 +34,7 @@ Open the FIMS folder in VS Code. Press **F5** and choose **FIMS: Debug frontend 
 
 ## Demo accounts
 
-Use a quick-account button on the login page or sign in with a listed email and the shared **demonstration password `Fims@2026`**. Switch accounts in the top-right header after login.
+Sign in with an institutional email and its account password. Sign out before signing in to another role. The initial password for each fictional account is its email prefix followed by @2026. For example, Aarav uses aarav.sharma@2026 and HR uses hr.induction@2026. Newly onboarded accounts use the same initial-password convention.
 
 | Role | Account | Email |
 | --- | --- | --- |
@@ -44,7 +44,7 @@ Use a quick-account button on the login page or sign in with a listed email and 
 | HR coordinator | Ms. Neha Verma | hr.induction@lnmiit.ac.in |
 | System administrator | Central Administration | admin@lnmiit.ac.in |
 
-Additional CSE/ECE accounts demonstrate mentor assignment and department restrictions. All people and records are fictional. Accounts selected through the switcher have their own identities and permissions.
+Additional CSE/ECE accounts demonstrate mentor assignment and department restrictions. All people and records are fictional. Each account has its own credentials and permissions.
 
 ## Try the complete workflow
 
@@ -61,12 +61,12 @@ Refresh between steps to verify persistence. See [the extended walkthrough](docs
 
 SQLite stores records, uploaded files, and generated certificates in `backend/data/fims.sqlite`. The backend seeds the database on first launch. Records survive browser refresh and server restart, and browser sessions connected to the same API share the records. Sign in again after restarting the API.
 
-Before a rehearsal or live demo, switch to **Central Administration** and select **Reset demo data** in the sidebar. Confirm to restore the fictional seed data and sign out all demo sessions. This erases all changes, uploads, and certificates from the demo database.
+Before a rehearsal or live demo, sign in as **Central Administration** and select **Reset demo data** in the sidebar. Confirm to restore the fictional seed data and sign out all demo sessions. This erases all changes, uploads, and certificates from the demo database.
 
 
 ## Prototype boundaries
 
-- The API binds to loopback and uses disposable demo sessions. Quick-account selection and the shared password are for fictional data only.
+- The API binds to loopback. Passwords are stored as salted scrypt hashes in a server-only SQLite table. Sessions expire after eight hours. Initial passwords follow a documented lab convention; password changes and recovery are future work.
 - File SHA-256 hashes are real. SQLite storage is not application-encrypted. File checks validate size, extension, reported MIME, and header signatures; they are not malware scanning or complete document parsing.
 - Generated PDFs have a real ID and integrity digest. HOD endorsement is clearly a demonstration; this is not an institutional digital signature or real credential.
 - Notifications persist in the app. Email delivery is simulated locally. No actual email is sent.
